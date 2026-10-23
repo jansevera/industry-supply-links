@@ -702,10 +702,29 @@ end
 -- cargo2supplyAndNeeds (COMMERCIAL / INDUSTRIAL / RESIDENTIAL) is above 0.
 -- The data also lists cargo the town will only ask for once it grows, with
 -- demand 0; those are left out. Returns needs, hasData.
-local function describe(value)
-	if type(value) ~= "table" then return tostring(value) end
+local function describe(value, depth)
+	depth = depth or 0
+	if type(value) == "userdata" then
+		local ok, text = pcall(function()
+			local parts = {}
+			for k, v in pairs(value) do parts[#parts + 1] = tostring(k) .. "=" .. describe(v, depth + 1) end
+			return "u{" .. table.concat(parts, ",") .. "}"
+		end)
+		if ok then return text end
+		local okLen, n = pcall(function() return #value end)
+		if okLen and n and n > 0 and depth < 3 then
+			local parts = {}
+			for i = 1, n do
+				local okItem, item = pcall(function() return value[i] end)
+				parts[#parts + 1] = okItem and describe(item, depth + 1) or "?"
+			end
+			return "u[" .. table.concat(parts, ",") .. "]"
+		end
+		return tostring(value)
+	end
+	if type(value) ~= "table" or depth > 3 then return tostring(value) end
 	local parts = {}
-	for k, v in pairs(value) do parts[#parts + 1] = tostring(k) .. "=" .. tostring(v) end
+	for k, v in pairs(value) do parts[#parts + 1] = tostring(k) .. "=" .. describe(v, depth + 1) end
 	table.sort(parts)
 	return "{" .. table.concat(parts, ",") .. "}"
 end
@@ -817,25 +836,23 @@ local function makeTown(townId)
 	if not entity or entity.type ~= "TOWN" then return nil end
 	local x, y = positionOf(entity)
 	if not x then return nil end
-	local needs, hasData = townNeedsFromComponent(townId)
-	if hasData then
-		log("town", townId, "requests from TOWN.cargoNeeds")
-	else
-		-- Demand numbers only count cargo already being delivered, so use them
-		-- only when the component is unavailable; with no demand at all, show
-		-- everything the town lists.
-		local listed
-		needs, hasData = townNeeds(entity)
-		if hasData and next(needs) == nil then
-			listed = {}
-			for _, info in pairs(entity.lu2cargoInfo) do
-				for cargo in pairs(type(info) == "table" and type(info.cargo2supplyAndNeeds) == "table"
-						and info.cargo2supplyAndNeeds or {}) do
-					if type(cargo) == "string" then listed[cargo] = true end
-				end
-			end
-			needs = listed
-		end
+	if settings().debug then
+		pcall(function()
+			local town = api.engine.getComponent(townId, api.type.ComponentType.TOWN)
+			log("town", townId, "TOWN.cargoNeeds=", describe(town and town.cargoNeeds))
+		end)
+		pcall(function()
+			log("town", townId, "getCargoSupplyAndLimit=",
+				describe(api.engine.system.townBuildingSystem.getCargoSupplyAndLimit(townId)))
+		end)
+	end
+	-- Cargo with demand > 0 is what the town currently asks for (worked for
+	-- Osaka). TOWN.cargoNeeds lists every cargo the town could ever want, so
+	-- it is only a last resort.
+	local needs, hasData = townNeeds(entity)
+	if hasData and next(needs) == nil then
+		log("town", townId, "has no demand above 0; using TOWN.cargoNeeds")
+		needs, hasData = townNeedsFromComponent(townId)
 	end
 	if not hasData then needs, hasData = townNeedsFromSystem(townId) end
 	if not hasData then

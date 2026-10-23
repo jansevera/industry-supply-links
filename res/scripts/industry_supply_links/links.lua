@@ -729,6 +729,65 @@ local function townNeeds(entity)
 	return needs, hasData
 end
 
+-- Iterates a Lua table or a userdata vector (0- or 1-based).
+local function eachValue(container, fn)
+	if container == nil then return end
+	local ok = pcall(function()
+		for key, value in pairs(container) do fn(value, key) end
+	end)
+	if ok then return end
+	pcall(function()
+		local n = #container
+		for i = 0, n do
+			local okItem, value = pcall(function() return container[i] end)
+			if okItem and value ~= nil then fn(value, i) end
+		end
+	end)
+end
+
+-- Cargo id ("FOOD") for a cargo given as id string or cargoTypeRep index.
+local function cargoId(value)
+	if type(value) == "string" and value ~= "" then return value end
+	local index = tonumber(value)
+	if not index then return nil end
+	local rep = api.res.cargoTypeRep
+	local ok, name = pcall(function() return rep.getName(index) end)
+	if not (ok and type(name) == "string" and name ~= "") then
+		ok, name = pcall(function() return rep.get(index).id end)
+	end
+	if ok and type(name) == "string" and name ~= "" then
+		return (name:match("([^/\\]+)$") or name):gsub("%.lua$", ""):upper()
+	end
+	return nil
+end
+
+-- Primary source: the cargo the town requests, from its TOWN component
+-- (cargoNeeds per land use). This is what the town's Suppliers tab lists,
+-- whether or not anything has been delivered yet. Returns needs, hasData.
+local function townNeedsFromComponent(townId)
+	local needs, hasData = {}, false
+	pcall(function()
+		local town = api.engine.getComponent(townId, api.type.ComponentType.TOWN)
+		local cargoNeeds = town and town.cargoNeeds
+		if cargoNeeds == nil then return end
+		eachValue(cargoNeeds, function(perLandUse)
+			local function add(value)
+				local cargo = cargoId(value)
+				if cargo then
+					needs[cargo] = true
+					hasData = true
+				end
+			end
+			if type(perLandUse) == "string" or type(perLandUse) == "number" then
+				add(perLandUse)
+			else
+				eachValue(perLandUse, add)
+			end
+		end)
+	end)
+	return needs, hasData
+end
+
 -- Second source: townBuildingSystem.getCargoSupplyAndLimit(town).
 local function townNeedsFromSystem(townId)
 	local needs, hasData = {}, false
@@ -758,7 +817,26 @@ local function makeTown(townId)
 	if not entity or entity.type ~= "TOWN" then return nil end
 	local x, y = positionOf(entity)
 	if not x then return nil end
-	local needs, hasData = townNeeds(entity)
+	local needs, hasData = townNeedsFromComponent(townId)
+	if hasData then
+		log("town", townId, "requests from TOWN.cargoNeeds")
+	else
+		-- Demand numbers only count cargo already being delivered, so use them
+		-- only when the component is unavailable; with no demand at all, show
+		-- everything the town lists.
+		local listed
+		needs, hasData = townNeeds(entity)
+		if hasData and next(needs) == nil then
+			listed = {}
+			for _, info in pairs(entity.lu2cargoInfo) do
+				for cargo in pairs(type(info) == "table" and type(info.cargo2supplyAndNeeds) == "table"
+						and info.cargo2supplyAndNeeds or {}) do
+					if type(cargo) == "string" then listed[cargo] = true end
+				end
+			end
+			needs = listed
+		end
+	end
 	if not hasData then needs, hasData = townNeedsFromSystem(townId) end
 	if not hasData then
 		-- No demand data at all: assume the usual town cargo.

@@ -5,6 +5,10 @@ connection, never more than 150 m apart) are drawn on the ground/map from every 
 a cargo this industry accepts), pointing at the industry that receives the cargo. The **Consumers** tab does the same in the other direction.
 Arrows disappear when you switch to another tab or close the window.
 
+**Towns** work the same way: open a town and arrows are drawn from every industry that produces a
+cargo the town needs (food, goods, fuel, tools, ...). If the town window has a Suppliers-like tab
+the arrows show on that tab; otherwise they show while the town window is open.
+
 - One colour per cargo type. A small "Supply links" window shows a square in each colour, the
   cargo's icon and name and how many industries are linked (e.g. `10 / 23` = nearest 10 of 23 shown).
 - The **Show arrows** switch at the top of that window turns the arrows off and on (the rings stay).
@@ -32,6 +36,7 @@ Arrows disappear when you switch to another tab or close the window.
 | Arrow size | Thin, Normal, Wide. |
 | Filled arrows | Fill the inside of each arrow (drawn as nested outlines). |
 | Lines on Consumers tab | Also draw lines on the Consumers tab. |
+| Town suppliers | Draw arrows to towns from industries producing the cargo they need. |
 | Legend window | Show the colour legend window. |
 | Suppliers / Consumers tab position | *Auto* finds the tab by its caption. If no lines appear, set its position counted from the left (1 = first tab). |
 | Debug log | Writes detection details to `stdout.txt` (lines start with `[IndustrySupplyLinks]`). |
@@ -50,7 +55,7 @@ Arrows disappear when you switch to another tab or close the window.
 
 - TF2 has no "draw a line" API for the map, so the arrows are ground zones. They follow the
   terrain, and they follow the straight line between industries (not routes).
-- Towns are not shown as consumers yet (the Consumers tab only links industries).
+- On an industry's Consumers tab, towns are not shown yet (only industries).
 - Modded industries whose recipe is not built from `stockListConfig` only get lines once they
   have produced/consumed something.
 - Tab detection by caption covers English, Czech, German, French, Spanish, Italian, Polish,

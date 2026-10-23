@@ -74,6 +74,7 @@ local function settings()
 		consumers = p.consumers ~= false,
 		legend = p.legend ~= false,
 		fill = p.fill ~= false,
+		towns = p.towns ~= false,
 		suppliersTab = tonumber(p.suppliersTab) or 0,
 		consumersTab = tonumber(p.consumersTab) or 0,
 		debug = p.debug == true,
@@ -680,14 +681,44 @@ local function addSeed(window, id)
 	window.seeds[#window.seeds + 1] = seed
 end
 
+-- What a town needs: every cargo listed in its land uses' cargo2supplyAndNeeds
+-- (COMMERCIAL / INDUSTRIAL / RESIDENTIAL).
+local function townNeeds(entity)
+	local needs = {}
+	for _, info in pairs(type(entity.lu2cargoInfo) == "table" and entity.lu2cargoInfo or {}) do
+		for cargo in pairs(type(info) == "table" and type(info.cargo2supplyAndNeeds) == "table"
+				and info.cargo2supplyAndNeeds or {}) do
+			if type(cargo) == "string" then needs[cargo] = true end
+		end
+	end
+	return needs
+end
+
+local function makeTown(townId)
+	local entity = getEntity(townId)
+	if not entity or entity.type ~= "TOWN" then return nil end
+	local x, y = positionOf(entity)
+	if not x then return nil end
+	return {
+		id = townId,
+		name = tostring(entity.name or ""),
+		x = x, y = y,
+		recipe = { inputs = townNeeds(entity), outputs = {} },
+	}
+end
+
 local function track(entityId)
-	local cid = resolveIndustryId(entityId)
+	local kind, cid = "industry", resolveIndustryId(entityId)
+	if not cid and settings().towns then
+		local entity = getEntity(entityId)
+		if entity and entity.type == "TOWN" then kind, cid = "town", entityId end
+	end
 	if not cid then return end
 	local window = state.windows[cid]
 	if not window then
-		window = { id = cid, seeds = {}, zones = {}, mode = nil, found = false }
+		window = { id = cid, kind = kind, seeds = {}, zones = {}, mode = nil, found = false }
 		state.windows[cid] = window
-		log("tracking industry window", cid, "from entity", entityId)
+		log("tracking", kind, "window", cid, "from entity", entityId)
 	end
 	window.created = state.frame
 	window.dirty = true
@@ -711,13 +742,17 @@ local function activeMode(window, config)
 	local visible = invoke(windowComponent, "isVisible")
 	if visible == false then return nil, true end
 	local tabs = inspectTabs(windowComponent, config)
+	-- A town window without a suppliers tab shows its suppliers while it is open.
+	if window.kind == "town" and (not tabs or tabs.suppliers == nil) then
+		return "suppliers", true
+	end
 	if not tabs then return nil, true end
 	local current = tonumber((invoke(tabs.widget, "getCurrentTabIndex")))
 	if not window.loggedTabs then
 		window.loggedTabs = true
 		local labels = {}
 		for i = 0, #tabs.labels do labels[#labels + 1] = i .. "=" .. tostring(tabs.labels[i]) end
-		log("tabs of industry", window.id, ":", table.concat(labels, ", "),
+		log("tabs of", window.kind, window.id, ":", table.concat(labels, ", "),
 			"suppliers=", tabs.suppliers, "consumers=", tabs.consumers)
 	end
 	if current == nil then return nil, true end
@@ -743,7 +778,12 @@ local function refresh(window, config)
 		return
 	end
 	local industries = allIndustries(true)
-	local target = findIndustry(industries, window.id)
+	local target
+	if window.kind == "town" then
+		target = makeTown(window.id)
+	else
+		target = findIndustry(industries, window.id)
+	end
 	if not target then
 		clearZones(window)
 		return

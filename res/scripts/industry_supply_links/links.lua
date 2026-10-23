@@ -691,17 +691,55 @@ local function addSeed(window, id)
 	window.seeds[#window.seeds + 1] = seed
 end
 
--- What a town needs: every cargo listed in its land uses' cargo2supplyAndNeeds
--- (COMMERCIAL / INDUSTRIAL / RESIDENTIAL).
+-- The demand number of a { supply, needs } pair (or a bare number).
+local function demandOf(value)
+	if type(value) == "number" then return value end
+	if type(value) ~= "table" then return 0 end
+	return tonumber(value[2] or value.needs or value.limit) or 0
+end
+
+-- What a town needs right now: cargo whose demand in its land uses'
+-- cargo2supplyAndNeeds (COMMERCIAL / INDUSTRIAL / RESIDENTIAL) is above 0.
+-- The data also lists cargo the town will only ask for once it grows, with
+-- demand 0; those are left out. Returns needs, hasData.
 local function townNeeds(entity)
-	local needs = {}
+	local needs, hasData = {}, false
 	for _, info in pairs(type(entity.lu2cargoInfo) == "table" and entity.lu2cargoInfo or {}) do
-		for cargo in pairs(type(info) == "table" and type(info.cargo2supplyAndNeeds) == "table"
-				and info.cargo2supplyAndNeeds or {}) do
-			if type(cargo) == "string" then needs[cargo] = true end
+		local list = type(info) == "table" and info.cargo2supplyAndNeeds
+		if type(list) == "table" then
+			for cargo, value in pairs(list) do
+				if type(cargo) == "string" then
+					hasData = true
+					if demandOf(value) > 0 then needs[cargo] = true end
+				end
+			end
 		end
 	end
-	return needs
+	return needs, hasData
+end
+
+-- Second source: townBuildingSystem.getCargoSupplyAndLimit(town).
+local function townNeedsFromSystem(townId)
+	local needs, hasData = {}, false
+	pcall(function()
+		local map = api.engine.system.townBuildingSystem.getCargoSupplyAndLimit(townId)
+		for key, value in pairs(map) do
+			local cargo = key
+			if type(key) ~= "string" then
+				local rep = api.res.cargoTypeRep
+				local okName, name = pcall(function() return rep.getName(key) end)
+				if not (okName and type(name) == "string") then
+					okName, name = pcall(function() return rep.get(key).id end)
+				end
+				cargo = okName and type(name) == "string" and name or nil
+			end
+			if cargo then
+				hasData = true
+				if demandOf(value) > 0 then needs[cargo] = true end
+			end
+		end
+	end)
+	return needs, hasData
 end
 
 local function makeTown(townId)
@@ -709,10 +747,11 @@ local function makeTown(townId)
 	if not entity or entity.type ~= "TOWN" then return nil end
 	local x, y = positionOf(entity)
 	if not x then return nil end
-	local needs = townNeeds(entity)
-	if next(needs) == nil then
-		-- Town data without a cargo list: assume the usual town cargo.
-		log("town", townId, "has no cargo needs in its data, using the default town cargo list")
+	local needs, hasData = townNeeds(entity)
+	if not hasData then needs, hasData = townNeedsFromSystem(townId) end
+	if not hasData then
+		-- No demand data at all: assume the usual town cargo.
+		log("town", townId, "has no cargo demand data, using the default town cargo list")
 		for _, cargo in ipairs(TOWN_CARGO) do needs[cargo] = true end
 	end
 	local list = {}

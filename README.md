@@ -6,7 +6,7 @@ a cargo this industry accepts), pointing at the industry that receives the cargo
 Arrows disappear when you switch to another tab or close the window.
 
 **Towns** work the same way: open a town and arrows are drawn from every industry that produces a
-cargo the town needs (food, goods, fuel, tools, ...) when its **Suppliers** tab is selected. The tab
+cargo the town needs right now (demand above 0; cargo it will only want once it grows is skipped) when its **Suppliers** tab is selected. The tab
 is found by its caption, otherwise the town window's last tab is used. The tab-position settings
 below apply to industry windows only.
 

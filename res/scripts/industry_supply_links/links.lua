@@ -402,16 +402,27 @@ local function hideLegend(window)
 	end
 end
 
-local function showLegend(window, target, mode, groups)
+-- Creates the (hidden) legend window. Done once at startup: creating a new
+-- window while an industry window is open makes the game close that
+-- (unpinned) industry window, which cleared the arrows on first use.
+local function createLegend()
+	if state.legend then return true end
 	local ok, err = pcall(function()
-		if not state.legend then
-			local tbl = api.gui.comp.Table.new(3, "NONE")
-			local win = api.gui.comp.Window.new(tr("ISL_LEGEND_TITLE"), tbl)
-			win:addHideOnCloseHandler()
-			win:setMovable(true)
-			win:setPosition(20, 160)
-			state.legend = { window = win, table = tbl }
-		end
+		local tbl = api.gui.comp.Table.new(3, "NONE")
+		local win = api.gui.comp.Window.new(tr("ISL_LEGEND_TITLE"), tbl)
+		win:addHideOnCloseHandler()
+		win:setMovable(true)
+		win:setPosition(20, 160)
+		win:setVisible(false, false)
+		state.legend = { window = win, table = tbl }
+	end)
+	if not ok then log("legend creation failed:", err) end
+	return state.legend ~= nil
+end
+
+local function showLegend(window, target, mode, groups)
+	if not createLegend() then return end
+	local ok, err = pcall(function()
 		local legend = state.legend
 		legend.table:deleteRows(0, legend.table:getNumRows())
 		for index, group in ipairs(groups) do
@@ -648,6 +659,8 @@ end
 
 function M.guiUpdate()
 	state.frame = state.frame + 1
+
+	if state.frame == 1 and settings().legend then createLegend() end
 
 	if #state.pendingIds > 0 then
 		local pending = state.pendingIds

@@ -30,6 +30,7 @@ function data()
 			ISL_NO_LINKS = "No matching industries",
 			ISL_SHOW_ARROWS = "Show arrows",
 			ISL_LINES = "Lines:",
+			ISL_HIDDEN = "hidden",
 		},
 		cs = {
 			ISL_MOD_NAME = "Propojení dodavatelů průmyslu",
@@ -61,6 +62,7 @@ function data()
 			ISL_NO_LINKS = "Žádné odpovídající průmysly",
 			ISL_SHOW_ARROWS = "Zobrazit šipky",
 			ISL_LINES = "Čáry:",
+			ISL_HIDDEN = "skryto",
 		},
 		de = {
 			ISL_MOD_NAME = "Industrie-Lieferverbindungen",
@@ -85,6 +87,7 @@ function data()
 			ISL_NO_LINKS = "Keine passenden Industrien",
 			ISL_SHOW_ARROWS = "Pfeile anzeigen",
 			ISL_LINES = "Linien:",
+			ISL_HIDDEN = "ausgeblendet",
 		},
 	}
 end

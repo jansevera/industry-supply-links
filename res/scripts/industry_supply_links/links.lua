@@ -54,6 +54,8 @@ local state = {
 	controls = nil,        -- legend window buttons
 	sentChoice = nil,      -- last choice sent to the engine, until it comes back
 	persist = nil,         -- engine side: choice stored in the savegame
+	hiddenCargo = {},      -- cargo hidden by clicking its legend row
+	legendRows = {},       -- legend row index (0-based) -> cargo
 }
 
 ------------------------------------------------------------------------------
@@ -358,7 +360,8 @@ local function drawLinks(window, target, mode, groups, width, fill)
 	for index, group in ipairs(groups) do
 		local c = palette[(index - 1) % #palette + 1]
 		local colour = { c[1], c[2], c[3], 1 }
-		for _, link in ipairs(group.links) do
+		local shown = state.hiddenCargo[group.cargo] and {} or group.links
+		for _, link in ipairs(shown) do
 			-- Arrows always point at the industry that receives the cargo.
 			local fromX, fromY, toX, toY = link.other.x, link.other.y, target.x, target.y
 			if mode == "consumers" then fromX, fromY, toX, toY = toX, toY, fromX, fromY end
@@ -480,6 +483,21 @@ local function setLines(value)
 	state.pendingLines = value
 end
 
+local function clickRow(index)
+	if tonumber(index) and index >= 0 then state.pendingRow = index end
+end
+
+-- Clicking a legend row hides or shows that cargo's arrows and rings.
+local function applyRowClick()
+	local index = state.pendingRow
+	state.pendingRow = nil
+	local cargo = state.legendRows[index]
+	if not cargo then return end
+	state.hiddenCargo[cargo] = not state.hiddenCargo[cargo] or nil
+	log("cargo", cargo, state.hiddenCargo[cargo] and "hidden" or "shown")
+	redrawAll()
+end
+
 local function applyPendingControls()
 	local changed = false
 	if state.pendingArrows ~= nil then
@@ -535,7 +553,8 @@ end
 local function createLegend()
 	if state.legend then return true end
 	local ok, err = pcall(function()
-		local tbl = api.gui.comp.Table.new(4, "NONE")
+		local tbl = api.gui.comp.Table.new(4, "SINGLE")
+		tbl:onSelect(clickRow)
 		local content = api.gui.comp.Component.new("isl-legend")
 		local layout = api.gui.layout.BoxLayout.new("VERTICAL")
 		local okControls, controlsErr = pcall(function() layout:addItem(createControls()) end)
@@ -558,7 +577,9 @@ local function showLegend(window, target, mode, groups)
 	local ok, err = pcall(function()
 		local legend = state.legend
 		legend.table:deleteRows(0, legend.table:getNumRows())
+		state.legendRows = {}
 		for index, group in ipairs(groups) do
+			state.legendRows[index - 1] = group.cargo
 			local colourIndex = (index - 1) % #palette + 1
 			local okSquare, dot = pcall(colourSquare, colourIndex)
 			if not okSquare then
@@ -568,6 +589,7 @@ local function showLegend(window, target, mode, groups)
 			end
 			local count = tostring(#group.links)
 			if #group.links < group.total then count = count .. " / " .. group.total end
+			if state.hiddenCargo[group.cargo] then count = tr("ISL_HIDDEN") end
 			legend.table:addRow({ dot, cargoIcon(group.cargo), api.gui.comp.TextView.new(cargoName(group.cargo)), api.gui.comp.TextView.new(count) })
 		end
 		if #groups == 0 then
@@ -1047,6 +1069,7 @@ function M.guiUpdate()
 	if state.pendingArrows ~= nil or state.pendingLines ~= nil then
 		pcall(applyPendingControls)
 	end
+	if state.pendingRow ~= nil then pcall(applyRowClick) end
 
 	if state.frame == 1 and settings().legend then createLegend() end
 

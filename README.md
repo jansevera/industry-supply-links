@@ -15,6 +15,7 @@ below apply to industry windows only.
 - The **Show arrows** switch at the top of that window turns the arrows off and on (the rings stay).
   Next to it, **Lines: 5 / 10 / 20 / All** changes how many industries per cargo are linked.
   Both choices are saved with the game; until you pick one, the mod settings apply.
+- Click a material's row in the legend to hide its arrows and rings; click it again to show them.
 - White ring = the industry you opened. Coloured ring = a possible supplier/consumer.
 - These are *possible* links (matching cargo), not current deliveries.
 

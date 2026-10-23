@@ -44,7 +44,7 @@ function data()
 			tags = { "Script Mod", "Misc" },
 			visible = true,
 			authors = {
-				{ name = "Jan", role = "CREATOR" },
+				{ name = "JohnnyGP[CZ]", role = "CREATOR" },
 			},
 			params = {
 				{

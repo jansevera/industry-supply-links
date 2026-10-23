@@ -702,15 +702,26 @@ end
 -- cargo2supplyAndNeeds (COMMERCIAL / INDUSTRIAL / RESIDENTIAL) is above 0.
 -- The data also lists cargo the town will only ask for once it grows, with
 -- demand 0; those are left out. Returns needs, hasData.
+local function describe(value)
+	if type(value) ~= "table" then return tostring(value) end
+	local parts = {}
+	for k, v in pairs(value) do parts[#parts + 1] = tostring(k) .. "=" .. tostring(v) end
+	table.sort(parts)
+	return "{" .. table.concat(parts, ",") .. "}"
+end
+
 local function townNeeds(entity)
 	local needs, hasData = {}, false
-	for _, info in pairs(type(entity.lu2cargoInfo) == "table" and entity.lu2cargoInfo or {}) do
+	for landUse, info in pairs(type(entity.lu2cargoInfo) == "table" and entity.lu2cargoInfo or {}) do
 		local list = type(info) == "table" and info.cargo2supplyAndNeeds
 		if type(list) == "table" then
 			for cargo, value in pairs(list) do
 				if type(cargo) == "string" then
 					hasData = true
 					if demandOf(value) > 0 then needs[cargo] = true end
+					log("town", entity.id, landUse, cargo, "supplyAndNeeds=", describe(value),
+						"productionAndNeeds=", describe(type(info.cargo2productionAndNeeds) == "table"
+							and info.cargo2productionAndNeeds[cargo]))
 				end
 			end
 		end

@@ -30,7 +30,7 @@ local LINE_CHOICES = { 5, 10, 20, 0 }
 -- Cargo vanilla towns can ask for (used only if a town's data lists none).
 local TOWN_CARGO = { "FOOD", "GOODS", "FUEL", "TOOLS", "CONSTRUCTION_MATERIALS", "MACHINES" }
 local ICON_SIZE = 20
-local LEGEND_SELECT_GRACE_FRAMES = 5
+local COUNT_WIDTH = 70
 local SWATCH_CELL = 24
 
 -- Lower-case fragments of the tab captions in the languages we know about.
@@ -56,7 +56,6 @@ local state = {
 	sentChoice = nil,      -- last choice sent to the engine, until it comes back
 	persist = nil,         -- engine side: choice stored in the savegame
 	hiddenCargo = {},      -- cargo hidden by clicking its legend row
-	legendRows = {},       -- legend row index (0-based) -> cargo
 }
 
 ------------------------------------------------------------------------------
@@ -484,19 +483,16 @@ local function setLines(value)
 	state.pendingLines = value
 end
 
--- Rebuilding the legend rows makes the table select its first row by itself;
--- selections that arrive while (or right after) the rows are rebuilt are not
--- clicks and are ignored, otherwise row 1 toggled itself forever.
-local function clickRow(index)
-	if state.rebuildingLegend or state.frame < (state.ignoreSelectUntil or 0) then return end
-	if tonumber(index) and index >= 0 then state.pendingRow = index end
+-- Every cell of a legend row is a flat button (a selectable table selected
+-- its first row by itself, and an already selected row ignored clicks).
+local function clickCargo(cargo)
+	state.pendingCargo = cargo
 end
 
 -- Clicking a legend row hides or shows that cargo's arrows and rings.
-local function applyRowClick()
-	local index = state.pendingRow
-	state.pendingRow = nil
-	local cargo = state.legendRows[index]
+local function applyCargoClick()
+	local cargo = state.pendingCargo
+	state.pendingCargo = nil
 	if not cargo then return end
 	state.hiddenCargo[cargo] = not state.hiddenCargo[cargo] or nil
 	log("cargo", cargo, state.hiddenCargo[cargo] and "hidden" or "shown")
@@ -558,8 +554,8 @@ end
 local function createLegend()
 	if state.legend then return true end
 	local ok, err = pcall(function()
-		local tbl = api.gui.comp.Table.new(4, "SINGLE")
-		tbl:onSelect(clickRow)
+		local tbl = api.gui.comp.Table.new(4, "NONE")
+		invoke(tbl, "setColWidth", 3, COUNT_WIDTH)
 		local content = api.gui.comp.Component.new("isl-legend")
 		local layout = api.gui.layout.BoxLayout.new("VERTICAL")
 		local okControls, controlsErr = pcall(function() layout:addItem(createControls()) end)
@@ -577,16 +573,33 @@ local function createLegend()
 	return state.legend ~= nil
 end
 
+local function rowCell(content, cargo)
+	local ok, button = pcall(function()
+		local b = api.gui.comp.Button.new(content, true)
+		b:onClick(function() clickCargo(cargo) end)
+		return b
+	end)
+	if ok and button then return button end
+	return content
+end
+
+-- Count column with a fixed width, so "hidden" does not move the row.
+local function countView(text)
+	local view = api.gui.comp.TextView.new(text)
+	local ok, size = pcall(function() return api.gui.util.Size.new(COUNT_WIDTH, ICON_SIZE) end)
+	if ok and size then
+		invoke(view, "setMinimumSize", size)
+		invoke(view, "setMaximumSize", size)
+	end
+	return view
+end
+
 local function showLegend(window, target, mode, groups)
 	if not createLegend() then return end
 	local ok, err = pcall(function()
 		local legend = state.legend
-		state.rebuildingLegend = true
-		state.ignoreSelectUntil = state.frame + LEGEND_SELECT_GRACE_FRAMES
 		legend.table:deleteRows(0, legend.table:getNumRows())
-		state.legendRows = {}
 		for index, group in ipairs(groups) do
-			state.legendRows[index - 1] = group.cargo
 			local colourIndex = (index - 1) % #palette + 1
 			local okSquare, dot = pcall(colourSquare, colourIndex)
 			if not okSquare then
@@ -597,19 +610,22 @@ local function showLegend(window, target, mode, groups)
 			local count = tostring(#group.links)
 			if #group.links < group.total then count = count .. " / " .. group.total end
 			if state.hiddenCargo[group.cargo] then count = tr("ISL_HIDDEN") end
-			legend.table:addRow({ dot, cargoIcon(group.cargo), api.gui.comp.TextView.new(cargoName(group.cargo)), api.gui.comp.TextView.new(count) })
+			local cargo = group.cargo
+			legend.table:addRow({
+				rowCell(dot, cargo),
+				rowCell(cargoIcon(cargo), cargo),
+				rowCell(api.gui.comp.TextView.new(cargoName(cargo)), cargo),
+				rowCell(countView(count), cargo),
+			})
 		end
 		if #groups == 0 then
-			legend.table:addRow({ api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(tr("ISL_NO_LINKS")), api.gui.comp.TextView.new("") })
+			legend.table:addRow({ api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(tr("ISL_NO_LINKS")), countView("") })
 		end
-		invoke(legend.table, "select", -1, false)
-		state.rebuildingLegend = false
 		local title = tr(mode == "suppliers" and "ISL_LEGEND_SUPPLIERS" or "ISL_LEGEND_CONSUMERS")
 		legend.window:setTitle(title .. ": " .. target.name)
 		legend.window:setVisible(true, false)
 		state.legendOwner = window.id
 	end)
-	state.rebuildingLegend = false
 	if not ok then log("legend failed:", err) end
 end
 
@@ -1079,7 +1095,7 @@ function M.guiUpdate()
 	if state.pendingArrows ~= nil or state.pendingLines ~= nil then
 		pcall(applyPendingControls)
 	end
-	if state.pendingRow ~= nil then pcall(applyRowClick) end
+	if state.pendingCargo ~= nil then pcall(applyCargoClick) end
 
 	if state.frame == 1 and settings().legend then createLegend() end
 

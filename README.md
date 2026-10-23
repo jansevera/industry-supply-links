@@ -8,6 +8,8 @@ Arrows disappear when you switch to another tab or close the window.
 - One colour per cargo type. A small "Supply links" window shows a square in each colour, the
   cargo's icon and name and how many industries are linked (e.g. `10 / 23` = nearest 10 of 23 shown).
 - The **Show arrows** switch at the top of that window turns the arrows off and on (the rings stay).
+  Next to it, **Lines: 5 / 10 / 20 / All** changes how many industries per cargo are linked.
+  Both choices are saved with the game; until you pick one, the mod settings apply.
 - White ring = the industry you opened. Coloured ring = a possible supplier/consumer.
 - These are *possible* links (matching cargo), not current deliveries.
 

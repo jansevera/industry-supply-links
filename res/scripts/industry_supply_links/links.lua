@@ -24,6 +24,9 @@ local ARROWS_MIN = 5
 local ARROW_MAX_GAP = 150
 local FILL_STEP = 3
 local SWATCH_SIZE = 14
+local EVENT_ID = "industry_supply_links"
+-- "Lines:" choices in the legend window (0 = all), same as the mod setting.
+local LINE_CHOICES = { 5, 10, 20, 0 }
 local ICON_SIZE = 20
 local SWATCH_CELL = 24
 
@@ -45,6 +48,10 @@ local state = {
 	legend = nil,
 	legendOwner = nil,
 	arrowsOn = true,       -- switched with the toggle in the legend window
+	maxPerCargo = nil,     -- chosen in the legend window; nil = mod setting
+	controls = nil,        -- legend window buttons
+	sentChoice = nil,      -- last choice sent to the engine, until it comes back
+	persist = nil,         -- engine side: choice stored in the savegame
 }
 
 ------------------------------------------------------------------------------
@@ -432,13 +439,94 @@ end
 -- Creates the (hidden) legend window. Done once at startup: creating a new
 -- window while an industry window is open makes the game close that
 -- (unpinned) industry window, which cleared the arrows on first use.
-local function setArrows(on)
-	state.arrowsOn = on
-	-- Redraw in guiUpdate, not inside the widget callback.
+local function redrawAll()
 	for _, window in pairs(state.windows) do
 		window.forceRedraw = true
 		window.dirty = true
 	end
+end
+
+-- Shows the current choices on the legend buttons.
+local function syncControls()
+	local controls = state.controls
+	if not controls then return end
+	invoke(controls.arrows, "setSelected", state.arrowsOn, false)
+	local current = state.maxPerCargo or settings().maxPerCargo
+	for index, button in ipairs(controls.lines) do
+		invoke(button, "setSelected", LINE_CHOICES[index] == current, false)
+	end
+end
+
+-- Stores the choices in the savegame (through the engine-side script).
+local function sendChoice()
+	local choice = { arrowsOn = state.arrowsOn, maxPerCargo = state.maxPerCargo }
+	state.sentChoice = choice
+	local ok, err = pcall(function() game.interface.sendScriptEvent(EVENT_ID, "settings", choice) end)
+	if not ok then
+		log("saving choice failed:", err)
+		state.sentChoice = nil
+	end
+end
+
+-- Widget callbacks only record the click; guiUpdate applies it.
+local function setArrows(on)
+	state.pendingArrows = on
+end
+
+local function setLines(value)
+	state.pendingLines = value
+end
+
+local function applyPendingControls()
+	local changed = false
+	if state.pendingArrows ~= nil then
+		changed = changed or state.pendingArrows ~= state.arrowsOn
+		state.arrowsOn = state.pendingArrows
+		state.pendingArrows = nil
+	end
+	if state.pendingLines ~= nil then
+		changed = changed or state.pendingLines ~= (state.maxPerCargo or settings().maxPerCargo)
+		state.maxPerCargo = state.pendingLines
+		state.pendingLines = nil
+	end
+	syncControls()
+	if changed then
+		sendChoice()
+		redrawAll()
+	end
+end
+
+local function lineLabel(value)
+	if value == 0 then return tr("ISL_ALL") end
+	return tostring(value)
+end
+
+-- Row at the top of the legend: [Show arrows]   Lines: [5] [10] [20] [All]
+local function createControls()
+	local row = api.gui.comp.Component.new("isl-controls")
+	local layout = api.gui.layout.BoxLayout.new("HORIZONTAL")
+	local controls = { lines = {} }
+
+	controls.arrows = api.gui.comp.ToggleButton.new(api.gui.comp.TextView.new(tr("ISL_SHOW_ARROWS")))
+	controls.arrows:onToggle(function(selected) setArrows(selected == true) end)
+	layout:addItem(controls.arrows)
+
+	local okLines, err = pcall(function()
+		local label = api.gui.comp.TextView.new("   " .. tr("ISL_LINES"))
+		layout:addItem(label)
+		for index, value in ipairs(LINE_CHOICES) do
+			local button = api.gui.comp.ToggleButton.new(api.gui.comp.TextView.new(lineLabel(value)))
+			button:onToggle(function() setLines(value) end)
+			layout:addItem(button)
+			controls.lines[index] = button
+		end
+	end)
+	if not okLines then log("lines buttons failed:", err) end
+
+	row:setLayout(layout)
+	state.controls = controls
+	syncControls()
+	return row
 end
 
 local function createLegend()
@@ -447,13 +535,8 @@ local function createLegend()
 		local tbl = api.gui.comp.Table.new(4, "NONE")
 		local content = api.gui.comp.Component.new("isl-legend")
 		local layout = api.gui.layout.BoxLayout.new("VERTICAL")
-		local okToggle, toggleErr = pcall(function()
-			local toggle = api.gui.comp.ToggleButton.new(api.gui.comp.TextView.new(tr("ISL_SHOW_ARROWS")))
-			toggle:setSelected(state.arrowsOn, false)
-			toggle:onToggle(function(selected) setArrows(selected == true) end)
-			layout:addItem(toggle)
-		end)
-		if not okToggle then log("arrow toggle failed:", toggleErr) end
+		local okControls, controlsErr = pcall(function() layout:addItem(createControls()) end)
+		if not okControls then log("legend controls failed:", controlsErr) end
 		layout:addItem(tbl)
 		content:setLayout(layout)
 		local win = api.gui.comp.Window.new(tr("ISL_LEGEND_TITLE"), content)
@@ -665,7 +748,7 @@ local function refresh(window, config)
 		clearZones(window)
 		return
 	end
-	local groups = computeLinks(target, mode, industries, config.maxPerCargo)
+	local groups = computeLinks(target, mode, industries, state.maxPerCargo or config.maxPerCargo)
 	drawLinks(window, target, mode, groups, config.lineWidth, config.fill)
 	if config.legend then showLegend(window, target, mode, groups) end
 end
@@ -707,6 +790,10 @@ end
 function M.guiUpdate()
 	state.frame = state.frame + 1
 
+	if state.pendingArrows ~= nil or state.pendingLines ~= nil then
+		pcall(applyPendingControls)
+	end
+
 	if state.frame == 1 and settings().legend then createLegend() end
 
 	if #state.pendingIds > 0 then
@@ -724,6 +811,47 @@ function M.guiUpdate()
 			local ok, err = pcall(refresh, window, config)
 			if not ok then log("refresh failed:", err) end
 		end
+	end
+end
+
+-- Savegame persistence of the legend choices. The engine-side script keeps
+-- the choice and saves it; the GUI side receives it through load().
+
+local function validChoice(data)
+	if type(data) ~= "table" then return nil end
+	local lines = tonumber(data.maxPerCargo)
+	local known = false
+	for _, value in ipairs(LINE_CHOICES) do known = known or value == lines end
+	return { arrowsOn = data.arrowsOn ~= false, maxPerCargo = known and lines or nil }
+end
+
+-- engine state
+function M.handleEvent(src, id, name, param)
+	if id == EVENT_ID and name == "settings" then
+		state.persist = validChoice(param)
+	end
+end
+
+function M.save()
+	return state.persist
+end
+
+-- Called with the saved data in both states (in the GUI several times a second).
+function M.load(data)
+	local choice = validChoice(data)
+	state.persist = choice
+	if not choice then return end
+	local sent = state.sentChoice
+	if sent then
+		-- Ignore stale data until the engine has stored what we sent.
+		if sent.arrowsOn ~= choice.arrowsOn or sent.maxPerCargo ~= choice.maxPerCargo then return end
+		state.sentChoice = nil
+	end
+	if choice.arrowsOn ~= state.arrowsOn or choice.maxPerCargo ~= state.maxPerCargo then
+		state.arrowsOn = choice.arrowsOn
+		state.maxPerCargo = choice.maxPerCargo
+		pcall(syncControls)
+		redrawAll()
 	end
 end
 

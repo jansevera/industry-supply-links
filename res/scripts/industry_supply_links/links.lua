@@ -807,7 +807,10 @@ local function townNeedsFromComponent(townId)
 	return needs, hasData
 end
 
--- Second source: townBuildingSystem.getCargoSupplyAndLimit(town).
+-- Primary source: the keys of townBuildingSystem.getCargoSupplyAndLimit(town)
+-- are exactly the cargo the town asks for (its Suppliers tab), even before
+-- anything is delivered (the value is then 0), e.g. Osaka {14,12,11,15},
+-- Incheon {11,14}.
 local function townNeedsFromSystem(townId)
 	local needs, hasData = {}, false
 	pcall(function()
@@ -824,7 +827,7 @@ local function townNeedsFromSystem(townId)
 			end
 			if cargo then
 				hasData = true
-				if demandOf(value) > 0 then needs[cargo] = true end
+				needs[cargo] = true
 			end
 		end
 	end)
@@ -846,15 +849,16 @@ local function makeTown(townId)
 				describe(api.engine.system.townBuildingSystem.getCargoSupplyAndLimit(townId)))
 		end)
 	end
-	-- Cargo with demand > 0 is what the town currently asks for (worked for
-	-- Osaka). TOWN.cargoNeeds lists every cargo the town could ever want, so
-	-- it is only a last resort.
-	local needs, hasData = townNeeds(entity)
-	if hasData and next(needs) == nil then
-		log("town", townId, "has no demand above 0; using TOWN.cargoNeeds")
-		needs, hasData = townNeedsFromComponent(townId)
+	-- Fallbacks: cargo with demand > 0, then TOWN.cargoNeeds (which lists
+	-- every cargo the town could ever want).
+	local needs, hasData = townNeedsFromSystem(townId)
+	if not hasData or next(needs) == nil then
+		needs, hasData = townNeeds(entity)
+		if not hasData or next(needs) == nil then
+			log("town", townId, "no requested cargo found; using TOWN.cargoNeeds")
+			needs, hasData = townNeedsFromComponent(townId)
+		end
 	end
-	if not hasData then needs, hasData = townNeedsFromSystem(townId) end
 	if not hasData then
 		-- No demand data at all: assume the usual town cargo.
 		log("town", townId, "has no cargo demand data, using the default town cargo list")

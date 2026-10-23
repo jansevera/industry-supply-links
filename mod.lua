@@ -36,7 +36,7 @@ end
 function data()
 	return {
 		info = {
-			minorVersion = 0,
+			minorVersion = 15,
 			severityAdd = "NONE",
 			severityRemove = "NONE",
 			name = _("ISL_MOD_NAME"),
@@ -61,9 +61,22 @@ function data()
 					defaultIndex = 1,
 				},
 				{
+					key = "fill",
+					name = _("ISL_PARAM_FILL"),
+					values = { _("ISL_OFF"), _("ISL_ON") },
+					defaultIndex = 1,
+				},
+				{
 					key = "consumers",
 					name = _("ISL_PARAM_CONSUMERS"),
 					tooltip = _("ISL_PARAM_CONSUMERS_TIP"),
+					values = { _("ISL_OFF"), _("ISL_ON") },
+					defaultIndex = 1,
+				},
+				{
+					key = "towns",
+					name = _("ISL_PARAM_TOWNS"),
+					tooltip = _("ISL_PARAM_TOWNS_TIP"),
 					values = { _("ISL_OFF"), _("ISL_ON") },
 					defaultIndex = 1,
 				},
@@ -112,6 +125,8 @@ function data()
 				lineWidth = ({ 10, 25, 50 })[pick("lineWidth", 1) + 1] or 25,
 				consumers = pick("consumers", 1) == 1,
 				legend = pick("legend", 1) == 1,
+				fill = pick("fill", 1) == 1,
+				towns = pick("towns", 1) == 1,
 				suppliersTab = pick("suppliersTab", 0),
 				consumersTab = pick("consumersTab", 0),
 				debug = pick("debug", 0) == 1,

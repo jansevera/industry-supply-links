@@ -27,6 +27,8 @@ local SWATCH_SIZE = 14
 local EVENT_ID = "industry_supply_links"
 -- "Lines:" choices in the legend window (0 = all), same as the mod setting.
 local LINE_CHOICES = { 5, 10, 20, 0 }
+-- Cargo vanilla towns can ask for (used only if a town's data lists none).
+local TOWN_CARGO = { "FOOD", "GOODS", "FUEL", "TOOLS", "CONSTRUCTION_MATERIALS", "MACHINES" }
 local ICON_SIZE = 20
 local SWATCH_CELL = 24
 
@@ -640,7 +642,10 @@ local function matches(label, words)
 end
 
 -- Finds the tab widget of an industry window and which tab index is which.
-local function inspectTabs(windowComponent, config)
+-- `kind` is "industry" or "town". The tab-position settings are for
+-- industry windows; a town window's Suppliers tab is found by its caption,
+-- or else taken to be the last tab (where the game puts it).
+local function inspectTabs(windowComponent, config, kind)
 	local found = nil
 	walk(windowComponent, function(item)
 		local numTabs = tonumber((invoke(item, "getNumTabs")))
@@ -653,8 +658,13 @@ local function inspectTabs(windowComponent, config)
 			if not info.suppliers and matches(label, TAB_WORDS.suppliers) then info.suppliers = i end
 			if not info.consumers and matches(label, TAB_WORDS.consumers) then info.consumers = i end
 		end
-		if config.suppliersTab > 0 then info.suppliers = config.suppliersTab - 1 end
-		if config.consumersTab > 0 then info.consumers = config.consumersTab - 1 end
+		if kind == "town" then
+			info.consumers = nil
+		else
+			if config.suppliersTab > 0 then info.suppliers = config.suppliersTab - 1 end
+			if config.consumersTab > 0 then info.consumers = config.consumersTab - 1 end
+		end
+		info.count = numTabs
 		found = found or info
 		if info.suppliers or info.consumers then
 			found = info
@@ -699,21 +709,75 @@ local function makeTown(townId)
 	if not entity or entity.type ~= "TOWN" then return nil end
 	local x, y = positionOf(entity)
 	if not x then return nil end
+	local needs = townNeeds(entity)
+	if next(needs) == nil then
+		-- Town data without a cargo list: assume the usual town cargo.
+		log("town", townId, "has no cargo needs in its data, using the default town cargo list")
+		for _, cargo in ipairs(TOWN_CARGO) do needs[cargo] = true end
+	end
+	local list = {}
+	for cargo in pairs(needs) do list[#list + 1] = cargo end
+	table.sort(list)
+	log("town", townId, tostring(entity.name), "needs:", table.concat(list, ", "))
 	return {
 		id = townId,
 		name = tostring(entity.name or ""),
 		x = x, y = y,
-		recipe = { inputs = townNeeds(entity), outputs = {} },
+		recipe = { inputs = needs, outputs = {} },
 	}
+end
+
+-- Clicking a house opens its town's window, so map town buildings to the town:
+-- first through townBuildingSystem, else the nearest town.
+local function townForBuilding(entityId, entity)
+	local direct = tonumber(entity.town or entity.townId or entity.townEntity)
+	if direct and (getEntity(direct) or {}).type == "TOWN" then return direct end
+	local ok, map = pcall(function() return api.engine.system.townBuildingSystem.getTown2BuildingMap() end)
+	if ok and map then
+		local found = nil
+		pcall(function()
+			for town, buildings in pairs(map) do
+				for _, building in pairs(buildings) do
+					if tonumber(building) == entityId then found = tonumber(town) return end
+				end
+			end
+		end)
+		if found then return found end
+	end
+	local x, y = positionOf(entity)
+	if not x then return nil end
+	local okTowns, towns = pcall(game.interface.getEntities, { pos = { x, y }, radius = 1e9 }, { type = "TOWN", includeData = false })
+	local best, bestDistance = nil, math.huge
+	for key, value in pairs(okTowns and type(towns) == "table" and towns or {}) do
+		local id = tonumber(value) or tonumber(key)
+		local tx, ty = positionOf(getEntity(id))
+		if tx then
+			local d = (tx - x) ^ 2 + (ty - y) ^ 2
+			if d < bestDistance then best, bestDistance = id, d end
+		end
+	end
+	return best
+end
+
+local function resolveTownId(entityId)
+	local entity = getEntity(entityId)
+	if not entity then return nil end
+	if entity.type == "TOWN" then return entityId end
+	if tostring(entity.type):find("TOWN", 1, true) then return townForBuilding(entityId, entity) end
+	return nil
 end
 
 local function track(entityId)
 	local kind, cid = "industry", resolveIndustryId(entityId)
 	if not cid and settings().towns then
-		local entity = getEntity(entityId)
-		if entity and entity.type == "TOWN" then kind, cid = "town", entityId end
+		local townId = resolveTownId(entityId)
+		if townId then kind, cid = "town", townId end
 	end
-	if not cid then return end
+	if not cid then
+		local entity = getEntity(entityId)
+		log("ignoring entity", entityId, "of type", entity and entity.type)
+		return
+	end
 	local window = state.windows[cid]
 	if not window then
 		window = { id = cid, kind = kind, seeds = {}, zones = {}, mode = nil, found = false }
@@ -741,10 +805,11 @@ local function activeMode(window, config)
 	local windowComponent = findWindowComponent(seed)
 	local visible = invoke(windowComponent, "isVisible")
 	if visible == false then return nil, true end
-	local tabs = inspectTabs(windowComponent, config)
-	-- A town window without a suppliers tab shows its suppliers while it is open.
-	if window.kind == "town" and (not tabs or tabs.suppliers == nil) then
-		return "suppliers", true
+	local tabs = inspectTabs(windowComponent, config, window.kind)
+	if window.kind == "town" then
+		-- No tabs at all: show the suppliers while the town window is open.
+		if not tabs then return "suppliers", true end
+		if tabs.suppliers == nil and (tabs.count or 0) > 0 then tabs.suppliers = tabs.count - 1 end
 	end
 	if not tabs then return nil, true end
 	local current = tonumber((invoke(tabs.widget, "getCurrentTabIndex")))

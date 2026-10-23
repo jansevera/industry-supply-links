@@ -6,8 +6,9 @@ a cargo this industry accepts), pointing at the industry that receives the cargo
 Arrows disappear when you switch to another tab or close the window.
 
 **Towns** work the same way: open a town and arrows are drawn from every industry that produces a
-cargo the town needs (food, goods, fuel, tools, ...). If the town window has a Suppliers-like tab
-the arrows show on that tab; otherwise they show while the town window is open.
+cargo the town needs (food, goods, fuel, tools, ...) when its **Suppliers** tab is selected. The tab
+is found by its caption, otherwise the town window's last tab is used. The tab-position settings
+below apply to industry windows only.
 
 - One colour per cargo type. A small "Supply links" window shows a square in each colour, the
   cargo's icon and name and how many industries are linked (e.g. `10 / 23` = nearest 10 of 23 shown).

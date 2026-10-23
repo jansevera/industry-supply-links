@@ -31,6 +31,7 @@ local LINE_CHOICES = { 5, 10, 20, 0 }
 local TOWN_CARGO = { "FOOD", "GOODS", "FUEL", "TOOLS", "CONSTRUCTION_MATERIALS", "MACHINES" }
 local ICON_SIZE = 20
 local COUNT_WIDTH = 70
+local NAME_WIDTH = 170
 local SWATCH_CELL = 24
 
 -- Lower-case fragments of the tab captions in the languages we know about.
@@ -483,8 +484,8 @@ local function setLines(value)
 	state.pendingLines = value
 end
 
--- Every cell of a legend row is a flat button (a selectable table selected
--- its first row by itself, and an already selected row ignored clicks).
+-- Each legend row is one flat button (a selectable table selected its first
+-- row by itself, and an already selected row ignored clicks).
 local function clickCargo(cargo)
 	state.pendingCargo = cargo
 end
@@ -554,8 +555,7 @@ end
 local function createLegend()
 	if state.legend then return true end
 	local ok, err = pcall(function()
-		local tbl = api.gui.comp.Table.new(4, "NONE")
-		invoke(tbl, "setColWidth", 3, COUNT_WIDTH)
+		local tbl = api.gui.comp.Table.new(1, "NONE")
 		local content = api.gui.comp.Component.new("isl-legend")
 		local layout = api.gui.layout.BoxLayout.new("VERTICAL")
 		local okControls, controlsErr = pcall(function() layout:addItem(createControls()) end)
@@ -573,7 +573,29 @@ local function createLegend()
 	return state.legend ~= nil
 end
 
-local function rowCell(content, cargo)
+local function fixedWidth(component, width)
+	local ok, size = pcall(function() return api.gui.util.Size.new(width, ICON_SIZE) end)
+	if ok and size then
+		invoke(component, "setMinimumSize", size)
+		invoke(component, "setMaximumSize", size)
+	end
+	return component
+end
+
+-- One row: [square] [icon] name        count, laid out with fixed widths so
+-- rows line up and "hidden" does not move anything.
+local function rowContent(cells)
+	local row = api.gui.comp.Component.new("isl-legend-row")
+	local layout = api.gui.layout.BoxLayout.new("HORIZONTAL")
+	for _, cell in ipairs(cells) do layout:addItem(cell) end
+	row:setLayout(layout)
+	return row
+end
+
+-- The whole row as one flat button; a click anywhere toggles its cargo.
+local function rowButton(cells, cargo)
+	local content = rowContent(cells)
+	if not cargo then return content end
 	local ok, button = pcall(function()
 		local b = api.gui.comp.Button.new(content, true)
 		b:onClick(function() clickCargo(cargo) end)
@@ -581,17 +603,6 @@ local function rowCell(content, cargo)
 	end)
 	if ok and button then return button end
 	return content
-end
-
--- Count column with a fixed width, so "hidden" does not move the row.
-local function countView(text)
-	local view = api.gui.comp.TextView.new(text)
-	local ok, size = pcall(function() return api.gui.util.Size.new(COUNT_WIDTH, ICON_SIZE) end)
-	if ok and size then
-		invoke(view, "setMinimumSize", size)
-		invoke(view, "setMaximumSize", size)
-	end
-	return view
 end
 
 local function showLegend(window, target, mode, groups)
@@ -611,15 +622,15 @@ local function showLegend(window, target, mode, groups)
 			if #group.links < group.total then count = count .. " / " .. group.total end
 			if state.hiddenCargo[group.cargo] then count = tr("ISL_HIDDEN") end
 			local cargo = group.cargo
-			legend.table:addRow({
-				rowCell(dot, cargo),
-				rowCell(cargoIcon(cargo), cargo),
-				rowCell(api.gui.comp.TextView.new(cargoName(cargo)), cargo),
-				rowCell(countView(count), cargo),
-			})
+			legend.table:addRow({ rowButton({
+				dot,
+				cargoIcon(cargo),
+				fixedWidth(api.gui.comp.TextView.new(cargoName(cargo)), NAME_WIDTH),
+				fixedWidth(api.gui.comp.TextView.new(count), COUNT_WIDTH),
+			}, cargo) })
 		end
 		if #groups == 0 then
-			legend.table:addRow({ api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(tr("ISL_NO_LINKS")), countView("") })
+			legend.table:addRow({ rowButton({ api.gui.comp.TextView.new(tr("ISL_NO_LINKS")) }) })
 		end
 		local title = tr(mode == "suppliers" and "ISL_LEGEND_SUPPLIERS" or "ISL_LEGEND_CONSUMERS")
 		legend.window:setTitle(title .. ": " .. target.name)

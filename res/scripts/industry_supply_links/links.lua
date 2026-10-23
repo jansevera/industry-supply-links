@@ -19,10 +19,10 @@ local CHECK_EVERY_FRAMES = 10
 local INDUSTRY_CACHE_FRAMES = 1800
 local SEED_TIMEOUT_FRAMES = 300
 local MAX_WALK_ITEMS = 400
-local MAX_ZONES_PER_WINDOW = 600
+local MAX_ZONES_PER_WINDOW = 5000
 local ARROWS_MIN = 5
-local ARROWS_MAX = 10
-local ARROW_SPACING = 1000
+local ARROW_MAX_GAP = 150
+local FILL_STEP = 3
 local SWATCH_SIZE = 14
 local SWATCH_CELL = 24
 
@@ -64,6 +64,7 @@ local function settings()
 		lineWidth = tonumber(p.lineWidth) or 25,
 		consumers = p.consumers ~= false,
 		legend = p.legend ~= false,
+		fill = p.fill ~= false,
 		suppliersTab = tonumber(p.suppliersTab) or 0,
 		consumersTab = tonumber(p.consumersTab) or 0,
 		debug = p.debug == true,
@@ -270,30 +271,42 @@ local function setZone(key, zone)
 end
 
 -- Arrowheads ("darts") spaced along the way from (x1,y1) to (x2,y2), all
--- pointing at (x2,y2). 5 arrows on short links, up to 10 on long ones.
-local function arrows(x1, y1, x2, y2, width)
+-- pointing at (x2,y2). At least 5 per link; more are added so the empty gap
+-- between two arrows never exceeds ARROW_MAX_GAP metres.
+-- With `fill`, each dart is drawn as nested, shrinking outlines inside one
+-- polygon, which reads as a filled shape (zones only draw outlines).
+local function arrows(x1, y1, x2, y2, width, fill)
 	local dx, dy = x2 - x1, y2 - y1
 	local length = math.sqrt(dx * dx + dy * dy)
 	if length < 1 then return {} end
 	local ux, uy = dx / length, dy / length
 	local nx, ny = -uy, ux
-	local count = math.max(ARROWS_MIN, math.min(ARROWS_MAX, math.floor(length / ARROW_SPACING)))
+	local fullLength = width * 5
+	local count = math.max(ARROWS_MIN, math.ceil(length / (fullLength + ARROW_MAX_GAP)))
 	local spacing = length / count
-	local arrowLength = math.min(width * 5, spacing * 0.6)
+	local arrowLength = math.min(fullLength, spacing * 0.6)
 	local halfWidth = arrowLength * 0.35
+	local loops = 1
+	if fill then loops = math.max(2, math.ceil(halfWidth / FILL_STEP)) end
 	local result = {}
 	for i = 1, count do
 		local t = (i - 0.5) / count
 		local cx, cy = x1 + dx * t, y1 + dy * t
-		local function at(along, side)
-			return { cx + ux * along + nx * side, cy + uy * along + ny * side }
+		local polygon = {}
+		for loop = 0, loops - 1 do
+			-- Scale about the dart's centre, which lies inside the shape.
+			local scale = 1 - loop / loops
+			local function add(along, side)
+				along, side = along * scale, side * scale
+				polygon[#polygon + 1] = { cx + ux * along + nx * side, cy + uy * along + ny * side }
+			end
+			add(arrowLength / 2, 0)
+			add(-arrowLength / 2, halfWidth)
+			add(-arrowLength / 4, 0)
+			add(-arrowLength / 2, -halfWidth)
+			if loops > 1 then add(arrowLength / 2, 0) end
 		end
-		result[#result + 1] = {
-			at(arrowLength / 2, 0),
-			at(-arrowLength / 2, halfWidth),
-			at(-arrowLength / 4, 0),
-			at(-arrowLength / 2, -halfWidth),
-		}
+		result[#result + 1] = polygon
 	end
 	return result
 end
@@ -324,7 +337,7 @@ local function addZone(window, polygon, colour)
 	end
 end
 
-local function drawLinks(window, target, mode, groups, width)
+local function drawLinks(window, target, mode, groups, width, fill)
 	clearZones(window)
 	addZone(window, ring(target.x, target.y, width * 5, width * 0.8), { 1, 1, 1, 1 })
 	for index, group in ipairs(groups) do
@@ -334,7 +347,7 @@ local function drawLinks(window, target, mode, groups, width)
 			-- Arrows always point at the industry that receives the cargo.
 			local fromX, fromY, toX, toY = link.other.x, link.other.y, target.x, target.y
 			if mode == "consumers" then fromX, fromY, toX, toY = toX, toY, fromX, fromY end
-			for _, arrow in ipairs(arrows(fromX, fromY, toX, toY, width)) do
+			for _, arrow in ipairs(arrows(fromX, fromY, toX, toY, width, fill)) do
 				addZone(window, arrow, colour)
 			end
 			addZone(window, ring(link.other.x, link.other.y, width * 3, width * 0.8), colour)
@@ -595,7 +608,7 @@ local function refresh(window, config)
 		return
 	end
 	local groups = computeLinks(target, mode, industries, config.maxPerCargo)
-	drawLinks(window, target, mode, groups, config.lineWidth)
+	drawLinks(window, target, mode, groups, config.lineWidth, config.fill)
 	if config.legend then showLegend(window, target, mode, groups) end
 end
 

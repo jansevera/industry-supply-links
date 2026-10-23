@@ -1,7 +1,7 @@
 # Industry Supply Links (Transport Fever 2 mod)
 
-Open an industry window and select the **Suppliers** tab: rows of coloured arrows (5 to 10 per
-connection) are drawn on the ground/map from every industry that *could* supply it (it produces
+Open an industry window and select the **Suppliers** tab: rows of filled coloured arrows (at least 5 per
+connection, never more than 150 m apart) are drawn on the ground/map from every industry that *could* supply it (it produces
 a cargo this industry accepts), pointing at the industry that receives the cargo. The **Consumers** tab does the same in the other direction.
 Arrows disappear when you switch to another tab or close the window.
 
@@ -26,7 +26,8 @@ Arrows disappear when you switch to another tab or close the window.
 | Setting | Meaning |
 |---|---|
 | Lines per cargo | Only the nearest 5 / 10 / 20 / all industries per cargo are linked. |
-| Line width | Arrow size: Thin, Normal, Wide. |
+| Arrow size | Thin, Normal, Wide. |
+| Filled arrows | Fill the inside of each arrow (drawn as nested outlines). |
 | Lines on Consumers tab | Also draw lines on the Consumers tab. |
 | Legend window | Show the colour legend window. |
 | Suppliers / Consumers tab position | *Auto* finds the tab by its caption. If no lines appear, set its position counted from the left (1 = first tab). |

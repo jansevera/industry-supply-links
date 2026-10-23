@@ -36,7 +36,7 @@ end
 function data()
 	return {
 		info = {
-			minorVersion = 1,
+			minorVersion = 2,
 			severityAdd = "NONE",
 			severityRemove = "NONE",
 			name = _("ISL_MOD_NAME"),
@@ -58,6 +58,12 @@ function data()
 					key = "lineWidth",
 					name = _("ISL_PARAM_WIDTH"),
 					values = { _("ISL_THIN"), _("ISL_NORMAL"), _("ISL_WIDE") },
+					defaultIndex = 1,
+				},
+				{
+					key = "fill",
+					name = _("ISL_PARAM_FILL"),
+					values = { _("ISL_OFF"), _("ISL_ON") },
 					defaultIndex = 1,
 				},
 				{
@@ -112,6 +118,7 @@ function data()
 				lineWidth = ({ 10, 25, 50 })[pick("lineWidth", 1) + 1] or 25,
 				consumers = pick("consumers", 1) == 1,
 				legend = pick("legend", 1) == 1,
+				fill = pick("fill", 1) == 1,
 				suppliersTab = pick("suppliersTab", 0),
 				consumersTab = pick("consumersTab", 0),
 				debug = pick("debug", 0) == 1,

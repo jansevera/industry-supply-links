@@ -19,8 +19,12 @@ local CHECK_EVERY_FRAMES = 10
 local INDUSTRY_CACHE_FRAMES = 1800
 local SEED_TIMEOUT_FRAMES = 300
 local MAX_WALK_ITEMS = 400
-local MAX_ZONES_PER_WINDOW = 300
-local SEGMENT_LENGTH = 250
+local MAX_ZONES_PER_WINDOW = 600
+local ARROWS_MIN = 5
+local ARROWS_MAX = 10
+local ARROW_SPACING = 1000
+local SWATCH_SIZE = 14
+local SWATCH_CELL = 24
 
 -- Lower-case fragments of the tab captions in the languages we know about.
 -- Matching is by substring, so "suppl" matches "Suppliers" and "Supply".
@@ -265,23 +269,33 @@ local function setZone(key, zone)
 	return ok
 end
 
--- A thin rectangle from (x1,y1) to (x2,y2), split into short pieces so it
--- follows the terrain better.
-local function ribbon(x1, y1, x2, y2, width)
+-- Arrowheads ("darts") spaced along the way from (x1,y1) to (x2,y2), all
+-- pointing at (x2,y2). 5 arrows on short links, up to 10 on long ones.
+local function arrows(x1, y1, x2, y2, width)
 	local dx, dy = x2 - x1, y2 - y1
 	local length = math.sqrt(dx * dx + dy * dy)
-	if length < 1 then return nil end
-	local nx, ny = -dy / length * width / 2, dx / length * width / 2
-	local steps = math.max(1, math.ceil(length / SEGMENT_LENGTH))
-	local left, right = {}, {}
-	for i = 0, steps do
-		local t = i / steps
-		local x, y = x1 + dx * t, y1 + dy * t
-		left[#left + 1] = { x + nx, y + ny }
-		right[#right + 1] = { x - nx, y - ny }
+	if length < 1 then return {} end
+	local ux, uy = dx / length, dy / length
+	local nx, ny = -uy, ux
+	local count = math.max(ARROWS_MIN, math.min(ARROWS_MAX, math.floor(length / ARROW_SPACING)))
+	local spacing = length / count
+	local arrowLength = math.min(width * 5, spacing * 0.6)
+	local halfWidth = arrowLength * 0.35
+	local result = {}
+	for i = 1, count do
+		local t = (i - 0.5) / count
+		local cx, cy = x1 + dx * t, y1 + dy * t
+		local function at(along, side)
+			return { cx + ux * along + nx * side, cy + uy * along + ny * side }
+		end
+		result[#result + 1] = {
+			at(arrowLength / 2, 0),
+			at(-arrowLength / 2, halfWidth),
+			at(-arrowLength / 4, 0),
+			at(-arrowLength / 2, -halfWidth),
+		}
 	end
-	for i = #right, 1, -1 do left[#left + 1] = right[i] end
-	return left
+	return result
 end
 
 -- An outline ring (outer circle, then inner circle reversed).
@@ -310,14 +324,19 @@ local function addZone(window, polygon, colour)
 	end
 end
 
-local function drawLinks(window, target, groups, width)
+local function drawLinks(window, target, mode, groups, width)
 	clearZones(window)
 	addZone(window, ring(target.x, target.y, width * 5, width * 0.8), { 1, 1, 1, 1 })
 	for index, group in ipairs(groups) do
 		local c = palette[(index - 1) % #palette + 1]
 		local colour = { c[1], c[2], c[3], 1 }
 		for _, link in ipairs(group.links) do
-			addZone(window, ribbon(link.other.x, link.other.y, target.x, target.y, width), colour)
+			-- Arrows always point at the industry that receives the cargo.
+			local fromX, fromY, toX, toY = link.other.x, link.other.y, target.x, target.y
+			if mode == "consumers" then fromX, fromY, toX, toY = toX, toY, fromX, fromY end
+			for _, arrow in ipairs(arrows(fromX, fromY, toX, toY, width)) do
+				addZone(window, arrow, colour)
+			end
 			addZone(window, ring(link.other.x, link.other.y, width * 3, width * 0.8), colour)
 		end
 	end
@@ -335,6 +354,32 @@ local function cargoName(cargo)
 	if ok and type(name) == "string" and name ~= "" then return tr(name) end
 	local pretty = cargo:lower():gsub("_", " ")
 	return (pretty:gsub("^%l", string.upper))
+end
+
+-- A filled square in the colour of the cargo's arrows, centred in its table
+-- cell. The colour comes from the style sheet (isl-swatch-<index>).
+local function colourSquare(colourIndex)
+	local styleName = "isl-swatch-" .. colourIndex
+	local square = api.gui.comp.Component.new(styleName)
+	square:setName(styleName)
+	invoke(square, "setStyleClassList", { styleName })
+	local ok, size = pcall(function() return api.gui.util.Size.new(SWATCH_SIZE, SWATCH_SIZE) end)
+	if ok and size then
+		invoke(square, "setMinimumSize", size)
+		invoke(square, "setMaximumSize", size)
+	end
+	invoke(square, "setGravity", 0.5, 0.5)
+
+	-- Wrap it in a fixed-size cell so it sits centred before the cargo name.
+	local cell = api.gui.comp.Component.new("isl-swatch-cell")
+	local layout = api.gui.layout.BoxLayout.new("VERTICAL")
+	local _, added = invoke(layout, "addItem", square, 0.5, 0.5)
+	if not added then layout:addItem(square) end
+	cell:setLayout(layout)
+	local okCell, cellSize = pcall(function() return api.gui.util.Size.new(SWATCH_CELL, SWATCH_CELL) end)
+	if okCell and cellSize then invoke(cell, "setMinimumSize", cellSize) end
+	invoke(cell, "setGravity", 0.5, 0.5)
+	return cell
 end
 
 local function hideLegend(window)
@@ -357,8 +402,13 @@ local function showLegend(window, target, mode, groups)
 		local legend = state.legend
 		legend.table:deleteRows(0, legend.table:getNumRows())
 		for index, group in ipairs(groups) do
-			local dot = api.gui.comp.TextView.new("●")
-			dot:setName("isl-colour-" .. ((index - 1) % #palette + 1))
+			local colourIndex = (index - 1) % #palette + 1
+			local okSquare, dot = pcall(colourSquare, colourIndex)
+			if not okSquare then
+				log("colour square failed:", dot)
+				dot = api.gui.comp.TextView.new("■")
+				dot:setName("isl-swatch-" .. colourIndex)
+			end
 			local count = tostring(#group.links)
 			if #group.links < group.total then count = count .. " / " .. group.total end
 			legend.table:addRow({ dot, api.gui.comp.TextView.new(cargoName(group.cargo)), api.gui.comp.TextView.new(count) })
@@ -545,7 +595,7 @@ local function refresh(window, config)
 		return
 	end
 	local groups = computeLinks(target, mode, industries, config.maxPerCargo)
-	drawLinks(window, target, groups, config.lineWidth)
+	drawLinks(window, target, mode, groups, config.lineWidth)
 	if config.legend then showLegend(window, target, mode, groups) end
 end
 
@@ -606,7 +656,7 @@ end
 
 -- Exposed for tests.
 M._computeLinks = computeLinks
-M._ribbon = ribbon
+M._arrows = arrows
 M._matches = matches
 M._TAB_WORDS = TAB_WORDS
 

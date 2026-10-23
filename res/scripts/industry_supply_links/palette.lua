@@ -1,5 +1,5 @@
--- Line colours, one per cargo type in the current view. The legend uses the
--- same list through the style sheet (style names "isl-colour-<index>").
+-- Arrow colours, one per cargo type in the current view. The legend squares
+-- use the same colours (copied into res/config/style_sheet/industry_supply_links.lua).
 return {
 	{ 0.96, 0.19, 0.21 },
 	{ 0.27, 0.69, 1.00 },

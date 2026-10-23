@@ -1,12 +1,12 @@
 # Industry Supply Links (Transport Fever 2 mod)
 
-Open an industry window and select the **Suppliers** tab: coloured lines are drawn on the
-ground/map from every industry that *could* supply it (it produces a cargo this industry
-accepts) to this industry. The **Consumers** tab does the same in the other direction.
-Lines disappear when you switch to another tab or close the window.
+Open an industry window and select the **Suppliers** tab: rows of coloured arrows (5 to 10 per
+connection) are drawn on the ground/map from every industry that *could* supply it (it produces
+a cargo this industry accepts), pointing at the industry that receives the cargo. The **Consumers** tab does the same in the other direction.
+Arrows disappear when you switch to another tab or close the window.
 
-- One colour per cargo type. A small "Supply links" window shows which colour is which
-  cargo and how many industries are linked (e.g. `10 / 23` = nearest 10 of 23 shown).
+- One colour per cargo type. A small "Supply links" window shows a square in each colour next to
+  the cargo name and how many industries are linked (e.g. `10 / 23` = nearest 10 of 23 shown).
 - White ring = the industry you opened. Coloured ring = a possible supplier/consumer.
 - These are *possible* links (matching cargo), not current deliveries.
 
@@ -26,7 +26,7 @@ Lines disappear when you switch to another tab or close the window.
 | Setting | Meaning |
 |---|---|
 | Lines per cargo | Only the nearest 5 / 10 / 20 / all industries per cargo are linked. |
-| Line width | Thin (10 m), Normal (25 m), Wide (50 m). |
+| Line width | Arrow size: Thin, Normal, Wide. |
 | Lines on Consumers tab | Also draw lines on the Consumers tab. |
 | Legend window | Show the colour legend window. |
 | Suppliers / Consumers tab position | *Auto* finds the tab by its caption. If no lines appear, set its position counted from the left (1 = first tab). |
@@ -44,8 +44,8 @@ Lines disappear when you switch to another tab or close the window.
 
 ## Known limits
 
-- TF2 has no "draw a line" API for the map, so lines are thin ground zones. They follow the
-  terrain but not bridges/tunnels, and they are straight lines (not routes).
+- TF2 has no "draw a line" API for the map, so the arrows are ground zones. They follow the
+  terrain, and they follow the straight line between industries (not routes).
 - Towns are not shown as consumers yet (the Consumers tab only links industries).
 - Modded industries whose recipe is not built from `stockListConfig` only get lines once they
   have produced/consumed something.

@@ -30,6 +30,7 @@ local LINE_CHOICES = { 5, 10, 20, 0 }
 -- Cargo vanilla towns can ask for (used only if a town's data lists none).
 local TOWN_CARGO = { "FOOD", "GOODS", "FUEL", "TOOLS", "CONSTRUCTION_MATERIALS", "MACHINES" }
 local ICON_SIZE = 20
+local LEGEND_SELECT_GRACE_FRAMES = 5
 local SWATCH_CELL = 24
 
 -- Lower-case fragments of the tab captions in the languages we know about.
@@ -483,7 +484,11 @@ local function setLines(value)
 	state.pendingLines = value
 end
 
+-- Rebuilding the legend rows makes the table select its first row by itself;
+-- selections that arrive while (or right after) the rows are rebuilt are not
+-- clicks and are ignored, otherwise row 1 toggled itself forever.
 local function clickRow(index)
+	if state.rebuildingLegend or state.frame < (state.ignoreSelectUntil or 0) then return end
 	if tonumber(index) and index >= 0 then state.pendingRow = index end
 end
 
@@ -576,6 +581,8 @@ local function showLegend(window, target, mode, groups)
 	if not createLegend() then return end
 	local ok, err = pcall(function()
 		local legend = state.legend
+		state.rebuildingLegend = true
+		state.ignoreSelectUntil = state.frame + LEGEND_SELECT_GRACE_FRAMES
 		legend.table:deleteRows(0, legend.table:getNumRows())
 		state.legendRows = {}
 		for index, group in ipairs(groups) do
@@ -595,11 +602,14 @@ local function showLegend(window, target, mode, groups)
 		if #groups == 0 then
 			legend.table:addRow({ api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(tr("ISL_NO_LINKS")), api.gui.comp.TextView.new("") })
 		end
+		invoke(legend.table, "select", -1, false)
+		state.rebuildingLegend = false
 		local title = tr(mode == "suppliers" and "ISL_LEGEND_SUPPLIERS" or "ISL_LEGEND_CONSUMERS")
 		legend.window:setTitle(title .. ": " .. target.name)
 		legend.window:setVisible(true, false)
 		state.legendOwner = window.id
 	end)
+	state.rebuildingLegend = false
 	if not ok then log("legend failed:", err) end
 end
 

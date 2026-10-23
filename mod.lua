@@ -36,7 +36,7 @@ end
 function data()
 	return {
 		info = {
-			minorVersion = 12,
+			minorVersion = 13,
 			severityAdd = "NONE",
 			severityRemove = "NONE",
 			name = _("ISL_MOD_NAME"),

@@ -5,8 +5,9 @@ connection, never more than 150 m apart) are drawn on the ground/map from every 
 a cargo this industry accepts), pointing at the industry that receives the cargo. The **Consumers** tab does the same in the other direction.
 Arrows disappear when you switch to another tab or close the window.
 
-- One colour per cargo type. A small "Supply links" window shows a square in each colour next to
-  the cargo name and how many industries are linked (e.g. `10 / 23` = nearest 10 of 23 shown).
+- One colour per cargo type. A small "Supply links" window shows a square in each colour, the
+  cargo's icon and name and how many industries are linked (e.g. `10 / 23` = nearest 10 of 23 shown).
+- The **Show arrows** switch at the top of that window turns the arrows off and on (the rings stay).
 - White ring = the industry you opened. Coloured ring = a possible supplier/consumer.
 - These are *possible* links (matching cargo), not current deliveries.
 

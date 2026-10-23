@@ -26,6 +26,7 @@ function data()
 			ISL_LEGEND_SUPPLIERS = "Possible suppliers",
 			ISL_LEGEND_CONSUMERS = "Possible consumers",
 			ISL_NO_LINKS = "No matching industries",
+			ISL_SHOW_ARROWS = "Show arrows",
 		},
 		cs = {
 			ISL_MOD_NAME = "Propojení dodavatelů průmyslu",
@@ -53,6 +54,7 @@ function data()
 			ISL_LEGEND_SUPPLIERS = "Možní dodavatelé",
 			ISL_LEGEND_CONSUMERS = "Možní odběratelé",
 			ISL_NO_LINKS = "Žádné odpovídající průmysly",
+			ISL_SHOW_ARROWS = "Zobrazit šipky",
 		},
 		de = {
 			ISL_MOD_NAME = "Industrie-Lieferverbindungen",
@@ -74,6 +76,7 @@ function data()
 			ISL_LEGEND_SUPPLIERS = "Mögliche Lieferanten",
 			ISL_LEGEND_CONSUMERS = "Mögliche Abnehmer",
 			ISL_NO_LINKS = "Keine passenden Industrien",
+			ISL_SHOW_ARROWS = "Pfeile anzeigen",
 		},
 	}
 end

@@ -24,6 +24,7 @@ local ARROWS_MIN = 5
 local ARROW_MAX_GAP = 150
 local FILL_STEP = 3
 local SWATCH_SIZE = 14
+local ICON_SIZE = 20
 local SWATCH_CELL = 24
 
 -- Lower-case fragments of the tab captions in the languages we know about.
@@ -43,6 +44,7 @@ local state = {
 	industriesFrame = -math.huge,
 	legend = nil,
 	legendOwner = nil,
+	arrowsOn = true,       -- switched with the toggle in the legend window
 }
 
 ------------------------------------------------------------------------------
@@ -311,17 +313,20 @@ local function arrows(x1, y1, x2, y2, width, fill)
 	return result
 end
 
--- An outline ring (outer circle, then inner circle reversed).
+-- A solid-looking ring: concentric circles FILL_STEP apart from `radius`
+-- down to `radius - thickness`, joined into one polygon.
 local function ring(x, y, radius, thickness)
 	local inner = math.max(1, radius - thickness)
-	local outer, back = {}, {}
-	for i = 0, 32 do
-		local a = i / 32 * math.pi * 2
-		outer[#outer + 1] = { x + math.cos(a) * radius, y + math.sin(a) * radius }
-		back[#back + 1] = { x + math.cos(a) * inner, y + math.sin(a) * inner }
+	local loops = math.max(2, math.ceil((radius - inner) / FILL_STEP) + 1)
+	local polygon = {}
+	for loop = 0, loops - 1 do
+		local r = radius - (radius - inner) * loop / (loops - 1)
+		for i = 0, 32 do
+			local a = i / 32 * math.pi * 2
+			polygon[#polygon + 1] = { x + math.cos(a) * r, y + math.sin(a) * r }
+		end
 	end
-	for i = #back, 1, -1 do outer[#outer + 1] = back[i] end
-	return outer
+	return polygon
 end
 
 local function clearZones(window)
@@ -339,7 +344,7 @@ end
 
 local function drawLinks(window, target, mode, groups, width, fill)
 	clearZones(window)
-	addZone(window, ring(target.x, target.y, width * 5, width * 0.8), { 1, 1, 1, 1 })
+	addZone(window, ring(target.x, target.y, width * 5, width * 1.6), { 1, 1, 1, 1 })
 	for index, group in ipairs(groups) do
 		local c = palette[(index - 1) % #palette + 1]
 		local colour = { c[1], c[2], c[3], 1 }
@@ -347,10 +352,12 @@ local function drawLinks(window, target, mode, groups, width, fill)
 			-- Arrows always point at the industry that receives the cargo.
 			local fromX, fromY, toX, toY = link.other.x, link.other.y, target.x, target.y
 			if mode == "consumers" then fromX, fromY, toX, toY = toX, toY, fromX, fromY end
-			for _, arrow in ipairs(arrows(fromX, fromY, toX, toY, width, fill)) do
-				addZone(window, arrow, colour)
+			if state.arrowsOn then
+				for _, arrow in ipairs(arrows(fromX, fromY, toX, toY, width, fill)) do
+					addZone(window, arrow, colour)
+				end
 			end
-			addZone(window, ring(link.other.x, link.other.y, width * 3, width * 0.8), colour)
+			addZone(window, ring(link.other.x, link.other.y, width * 3, width * 1.2), colour)
 		end
 	end
 	log("drew", #window.zones, "zones for industry", target.id)
@@ -358,6 +365,26 @@ end
 
 ------------------------------------------------------------------------------
 -- legend window
+
+-- The cargo's own icon (as used in the game's cargo lists), or an empty cell.
+local function cargoIcon(cargo)
+	local ok, image = pcall(function()
+		local rep = api.res.cargoTypeRep
+		local icon = rep.get(rep.find(cargo)).icon
+		if type(icon) ~= "string" or icon == "" then error("no icon") end
+		local view = api.gui.comp.ImageView.new(icon)
+		local okSize, size = pcall(function() return api.gui.util.Size.new(ICON_SIZE, ICON_SIZE) end)
+		if okSize and size then
+			invoke(view, "setMaximumSize", size)
+			invoke(view, "setMinimumSize", size)
+		end
+		invoke(view, "setGravity", 0.5, 0.5)
+		return view
+	end)
+	if ok and image then return image end
+	log("no icon for cargo", cargo, image)
+	return api.gui.comp.TextView.new("")
+end
 
 local function cargoName(cargo)
 	local ok, name = pcall(function()
@@ -405,11 +432,31 @@ end
 -- Creates the (hidden) legend window. Done once at startup: creating a new
 -- window while an industry window is open makes the game close that
 -- (unpinned) industry window, which cleared the arrows on first use.
+local function setArrows(on)
+	state.arrowsOn = on
+	-- Redraw in guiUpdate, not inside the widget callback.
+	for _, window in pairs(state.windows) do
+		window.forceRedraw = true
+		window.dirty = true
+	end
+end
+
 local function createLegend()
 	if state.legend then return true end
 	local ok, err = pcall(function()
-		local tbl = api.gui.comp.Table.new(3, "NONE")
-		local win = api.gui.comp.Window.new(tr("ISL_LEGEND_TITLE"), tbl)
+		local tbl = api.gui.comp.Table.new(4, "NONE")
+		local content = api.gui.comp.Component.new("isl-legend")
+		local layout = api.gui.layout.BoxLayout.new("VERTICAL")
+		local okToggle, toggleErr = pcall(function()
+			local toggle = api.gui.comp.ToggleButton.new(api.gui.comp.TextView.new(tr("ISL_SHOW_ARROWS")))
+			toggle:setSelected(state.arrowsOn, false)
+			toggle:onToggle(function(selected) setArrows(selected == true) end)
+			layout:addItem(toggle)
+		end)
+		if not okToggle then log("arrow toggle failed:", toggleErr) end
+		layout:addItem(tbl)
+		content:setLayout(layout)
+		local win = api.gui.comp.Window.new(tr("ISL_LEGEND_TITLE"), content)
 		win:addHideOnCloseHandler()
 		win:setMovable(true)
 		win:setPosition(20, 160)
@@ -435,10 +482,10 @@ local function showLegend(window, target, mode, groups)
 			end
 			local count = tostring(#group.links)
 			if #group.links < group.total then count = count .. " / " .. group.total end
-			legend.table:addRow({ dot, api.gui.comp.TextView.new(cargoName(group.cargo)), api.gui.comp.TextView.new(count) })
+			legend.table:addRow({ dot, cargoIcon(group.cargo), api.gui.comp.TextView.new(cargoName(group.cargo)), api.gui.comp.TextView.new(count) })
 		end
 		if #groups == 0 then
-			legend.table:addRow({ api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(tr("ISL_NO_LINKS")), api.gui.comp.TextView.new("") })
+			legend.table:addRow({ api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(""), api.gui.comp.TextView.new(tr("ISL_NO_LINKS")), api.gui.comp.TextView.new("") })
 		end
 		local title = tr(mode == "suppliers" and "ISL_LEGEND_SUPPLIERS" or "ISL_LEGEND_CONSUMERS")
 		legend.window:setTitle(title .. ": " .. target.name)

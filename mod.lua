@@ -36,7 +36,7 @@ end
 function data()
 	return {
 		info = {
-			minorVersion = 15,
+			minorVersion = 16,
 			severityAdd = "NONE",
 			severityRemove = "NONE",
 			name = _("ISL_MOD_NAME"),
@@ -79,6 +79,13 @@ function data()
 					tooltip = _("ISL_PARAM_TOWNS_TIP"),
 					values = { _("ISL_OFF"), _("ISL_ON") },
 					defaultIndex = 1,
+				},
+				{
+					key = "townHouses",
+					name = _("ISL_PARAM_HOUSES"),
+					tooltip = _("ISL_PARAM_HOUSES_TIP"),
+					values = { _("ISL_OFF"), _("ISL_ON") },
+					defaultIndex = 0,
 				},
 				{
 					key = "legend",
@@ -127,6 +134,7 @@ function data()
 				legend = pick("legend", 1) == 1,
 				fill = pick("fill", 1) == 1,
 				towns = pick("towns", 1) == 1,
+				townHouses = pick("townHouses", 0) == 1,
 				suppliersTab = pick("suppliersTab", 0),
 				consumersTab = pick("consumersTab", 0),
 				debug = pick("debug", 0) == 1,

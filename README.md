@@ -39,6 +39,7 @@ below apply to industry windows only.
 | Filled arrows | Fill the inside of each arrow (drawn as nested outlines). |
 | Lines on Consumers tab | Also draw lines on the Consumers tab. |
 | Town suppliers | Draw arrows to towns from industries producing the cargo they need. |
+| Arrows when clicking a house | Off by default: clicking a house in a town draws nothing; open the town itself (its name label) to see its arrows. On: houses show their town's arrows too. |
 | Legend window | Show the colour legend window. |
 | Suppliers / Consumers tab position | *Auto* finds the tab by its caption. If no lines appear, set its position counted from the left (1 = first tab). |
 | Debug log | Writes detection details to `stdout.txt` (lines start with `[IndustrySupplyLinks]`). |

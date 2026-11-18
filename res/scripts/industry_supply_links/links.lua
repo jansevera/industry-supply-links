@@ -80,6 +80,7 @@ local function settings()
 		legend = p.legend ~= false,
 		fill = p.fill ~= false,
 		towns = p.towns ~= false,
+		townHouses = p.townHouses == true,
 		suppliersTab = tonumber(p.suppliersTab) or 0,
 		consumersTab = tonumber(p.consumersTab) or 0,
 		debug = p.debug == true,
@@ -971,14 +972,19 @@ local function resolveTownId(entityId)
 	local entity = getEntity(entityId)
 	if not entity then return nil end
 	if entity.type == "TOWN" then return entityId end
-	if tostring(entity.type):find("TOWN", 1, true) then return townForBuilding(entityId, entity) end
-	return nil
+	if not tostring(entity.type):find("TOWN", 1, true) then return nil end
+	if not settings().townHouses then
+		log("ignoring town building", entityId, "(arrows from houses are off)")
+		return nil, true
+	end
+	return townForBuilding(entityId, entity)
 end
 
 local function track(entityId)
 	local kind, cid = "industry", resolveIndustryId(entityId)
 	if not cid and settings().towns then
-		local townId = resolveTownId(entityId)
+		local townId, skipped = resolveTownId(entityId)
+		if skipped then return end
 		if townId then kind, cid = "town", townId end
 	end
 	if not cid then
